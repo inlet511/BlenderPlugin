@@ -37,9 +37,15 @@ class EmptyScene(bpy.types.Operator):
     bl_label = "清空场景"
 
     def execute(self,context):
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='SELECT')
-        bpy.ops.object.delete(use_global=False)
+        # 获取当前激活对象
+        obj = bpy.context.active_object
+        # 如果有激活对象
+        if obj is not None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        if len(bpy.data.objects) > 0:
+            bpy.ops.object.select_all(action='SELECT')
+            bpy.ops.object.delete(use_global=False)
         return {'FINISHED'}
 
 
