@@ -29,12 +29,10 @@ class CustomPanel(bpy.types.Panel):
         layout.operator("scene.clear_scene",text = "清空场景")
         layout.operator("scene.import_fbx", text="导入FBX")
         layout.operator("object.delete_loose_element", text="删除游离元素")
-        layout.operator("object.dissolve_degenerated", text="融并清理")
-        layout.prop(scene,"merge_threshold")
+        layout.operator("object.dissolve_degenerated", text="融并清理")        
         layout.operator("object.merge_by_distance", text="按间距合并")
         layout.operator("object.fill_holes", text="填补漏洞")
-        layout.operator("object.add_decimate_modifier", text="减面设置")
-        layout.operator("object.apply_decimate_modifier", text="应用减面")
+        layout.operator("object.decimate", text="减面")
         layout.operator("scene.export_fbx", text="导出FBX")
 
 # 清空场景
@@ -83,13 +81,18 @@ class DeleteLooseOperator(bpy.types.Operator):
     bl_description = "删除游离的点、边"
 
     def execute(self, context):
-         # 获取当前选中的对象
-        obj = context.active_object
-        if obj is not None:
-            # 切换到编辑模式
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.delete_loose(use_faces=True)
+        meshes = set(o for o in context.selected_objects
+                      if o.type == 'MESH')
+        for m in meshes:
+            bpy.context.view_layer.objects.active = m
+            bpy.ops.object.mode_set(mode='OBJECT')  # 确保处于对象模式
+            bpy.ops.object.select_all(action='DESELECT')  # 取消所有选择
+            m.select_set(True)  # 选择当前对象
+            bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式
+            bpy.ops.mesh.select_all(action='SELECT')  # 选择所有面
+            # 删除游离面
+            bpy.ops.mesh.delete_loose(use_faces=True) 
+            bpy.ops.object.mode_set(mode='OBJECT')  # 返回对象模式
         return {'FINISHED'}
 
 
@@ -101,12 +104,18 @@ class DissolveDegeneratedOperator(bpy.types.Operator):
 
     def execute(self, context):
         # 获取当前选中的对象
-        obj = context.active_object
-        if obj is not None:
-            # 切换到编辑模式
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.dissolve_degenerate()
+        meshes = set(o.data for o in context.selected_objects
+                      if o.type == 'MESH')
+        bm = bmesh.new()
+
+        for m in meshes:
+            bm.from_mesh(m)
+            bmesh.ops.dissolve_degenerate(bm, dist=0.0001, edges=bm.edges)
+            bm.to_mesh(m)
+            m.update()
+            bm.clear()
+
+        bm.free()
         return {'FINISHED'}
 
 # 按间距合并
@@ -115,24 +124,27 @@ class MergeByDistanceOperator(bpy.types.Operator):
     bl_label = "按间距合并"
     bl_description = "合并重合的点(按照距离)"
 
+    distance : bpy.props.FloatProperty(name="阈值(m)",default=0.0001)
     
     def execute(self,context):
-        distance = 0.01
+        d = self.distance        
          # 获取当前选中的对象
         meshes = set(o.data for o in context.selected_objects
                       if o.type == 'MESH')
-
         bm = bmesh.new()
 
         for m in meshes:
             bm.from_mesh(m)
-            bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
+            bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=d)
             bm.to_mesh(m)
             m.update()
             bm.clear()
 
         bm.free()
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
 # 填补漏洞
 class FillHoleOperator(bpy.types.Operator):
@@ -140,49 +152,61 @@ class FillHoleOperator(bpy.types.Operator):
     bl_label = "填补漏洞"
     bl_description = "填补破开的洞"
 
+    sides : bpy.props.IntProperty(name="最大边数",default=20)
+
     def execute(self,context):
+        s = self.sides
+        
         # 获取当前选中的对象
-        obj = context.active_object
-        if obj is not None:
-            # 切换到编辑模式
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.fill_holes()
+        meshes = set(o.data for o in context.selected_objects
+                      if o.type == 'MESH')
+        bm = bmesh.new()
+
+        for m in meshes:
+            bm.from_mesh(m)
+            bmesh.ops.holes_fill(bm, edges=bm.edges, sides=s)
+            bm.to_mesh(m)
+            m.update()
+            bm.clear()
+
+        bm.free()
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
 # 定义一个操作符用于添加 "Decimate" 修饰器
 class AddDecimateModifierOperator(bpy.types.Operator):
-    bl_idname = "object.add_decimate_modifier"
+    bl_idname = "object.decimate"
     bl_label = "减面设置"
     bl_description = "给对象添加减面修改器"
+
+    ratio : bpy.props.FloatProperty(name="精简比例",default=0.3)
     
     # 执行操作的函数
     def execute(self, context):
+        r = self.ratio
         # 获取当前选中的对象
-        obj = context.active_object
+        meshes = set(o for o in context.selected_objects
+                      if o.type == 'MESH')
+        for m in meshes:
+            bpy.context.view_layer.objects.active = m
+            bpy.ops.object.mode_set(mode='OBJECT')  # 确保处于对象模式
+            bpy.ops.object.select_all(action='DESELECT')  # 取消所有选择
+            m.select_set(True)  # 选择当前对象
+            bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式
+            bpy.ops.mesh.select_all(action='SELECT')  # 选择所有面
 
-        # 切换到修改器面板
-        C = bpy.context
-        for area in C.screen.areas:
-            if area.type == 'PROPERTIES' and C.object.type not in ('LIGHT_PROBE', 'CAMERA', 'LIGHT', 'SPEAKER'):
-                # Set it the active space
-                area.spaces.active.context = 'MODIFIER' # 'VIEW_LAYER', 'SCENE' etc.
-                break # OPTIONAL
+            # 使用Decimate进行减面
+            bpy.ops.mesh.decimate(ratio=r)  # 在这里设置减面比率
 
-        # 添加 "Decimate" 修饰器
-        modifier = obj.modifiers.new(name="Decimate", type='DECIMATE')
+            bpy.ops.object.mode_set(mode='OBJECT')  # 返回对象模式
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
-# 应用减面设置
-class ApplyDecimateModifierOperator(bpy.types.Operator):
-    bl_idname="object.apply_decimate_modifier"
-    bl_label="应用减面"
-    bl_description = "应用减面修改器"
 
-    def execute(self,context):
-        obj = context.active_object
-        bpy.ops.object.modifier_apply(modifier="Decimate")
-        return {'FINISHED'}
 
 
 
@@ -194,13 +218,10 @@ def register():
     bpy.utils.register_class(ImportFBXOperator)
     bpy.utils.register_class(ExportFBXOperator)
     bpy.utils.register_class(AddDecimateModifierOperator)
-    bpy.utils.register_class(ApplyDecimateModifierOperator)
     bpy.utils.register_class(DeleteLooseOperator)
     bpy.utils.register_class(DissolveDegeneratedOperator)
     bpy.utils.register_class(MergeByDistanceOperator)
     bpy.utils.register_class(FillHoleOperator)
-
-    bpy.types.Scene.merge_threshold = bpy.props.FloatProperty(name="merge_threshold", default=0.001)
 
 
 # 注销面板和操作符
@@ -210,13 +231,11 @@ def unregister():
     bpy.utils.unregister_class(ImportFBXOperator)
     bpy.utils.unregister_class(ExportFBXOperator)
     bpy.utils.unregister_class(AddDecimateModifierOperator)
-    bpy.utils.unregister_class(ApplyDecimateModifierOperator)
     bpy.utils.unregister_class(DeleteLooseOperator)
     bpy.utils.unregister_class(DissolveDegeneratedOperator)
     bpy.utils.unregister_class(MergeByDistanceOperator)
     bpy.utils.unregister_class(FillHoleOperator)
 
-    del bpy.types.Scene.merge_threshold
 
 
 # 在脚本执行时调用注册函数
