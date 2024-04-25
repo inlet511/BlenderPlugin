@@ -24,17 +24,37 @@ class OBJECT_PT_CustomPanel(bpy.types.Panel):
     # 绘制面板内容
     def draw(self, context):
         layout = self.layout
-        scene = context.scene
+        scene = context.scene        
+        
+        box = layout.box()
+        box.label(text="清理")        
+        row1 = box.row()
+        row1.operator("scene.clear_scene",text = "清空场景")
+        row1.operator("object.delete_loose_element", text="删除游离元素")
+        
+        row2 = box.row()
+        row2.operator("object.dissolve_degenerated", text="融并清理")        
+        row2.operator("object.merge_by_distance", text="按间距合并")
+        
+        box2 = layout.box()
+        box2.label(text="补洞")
+        
+        row3 = box2.row()
+        row3.operator("object.select_openedge", text = "高亮破洞")
+        row3.operator("object.fill_selected_hole", text = "填充选择的破洞")        
+        box2.operator("object.fill_holes", text="自动填补破洞")
 
-        layout.operator("scene.clear_scene",text = "清空场景")
-        layout.operator("object.delete_loose_element", text="删除游离元素")
-        layout.operator("object.dissolve_degenerated", text="融并清理")        
-        layout.operator("object.merge_by_distance", text="按间距合并")
-        layout.operator("object.fill_holes", text="填补漏洞")
-        layout.operator("object.decimateselected", text="选择对象减面")
-        layout.operator("object.get_vertex_volume_rate", text="获取对象顶点体积比")
-        layout.operator("object.decimate", text="整体减面")
-        layout.operator("scene.export_fbx", text="导出FBX")
+        
+        box3 = layout.box()
+        box3.label(text="减面")
+        row4 = box3.row()
+        row4.operator("object.decimateselected", text="选择对象减面")
+        row4.operator("object.get_vertex_volume_rate", text="获取顶点体积比")
+        box3.operator("object.decimate", text="整体减面")
+                
+        box4 = layout.box()
+        box4.label(text="导出")
+        box4.operator("scene.export_fbx", text="导出FBX")
 
 # 清空场景
 class OBJECT_OT_EmptyScene(bpy.types.Operator):
@@ -53,7 +73,53 @@ class OBJECT_OT_EmptyScene(bpy.types.Operator):
             bpy.ops.object.select_all(action='SELECT')
             bpy.ops.object.delete(use_global=False)
         return {'FINISHED'}
+    
+# 选择破洞
+class OBJECT_OT_SelectOpenEdgeOperator(bpy.types.Operator):
+    bl_idname = "object.select_openedge"
+    bl_label = "选择开放边"
+    bl_description = "选择开放边"
+    
+    def execute(self, context):
+        # 获取当前选择的对象        
+        meshes = set(o for o in context.selected_objects
+                      if o.type == 'MESH')
 
+        # 确保对象是网格对象
+        for m in meshes:
+            bpy.context.view_layer.objects.active = m
+            bpy.ops.object.mode_set(mode='OBJECT')  # 确保处于对象模式
+            bpy.ops.object.select_all(action='DESELECT')  # 取消所有选择
+            m.select_set(True)  # 选择当前对象
+            bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式
+
+            # 切换到边模式
+            bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='EDGE')
+
+            # 重置选择
+            bpy.ops.mesh.select_all(action='DESELECT')
+
+            # 选中破洞的边
+            bpy.ops.mesh.select_non_manifold()
+        
+        return {'FINISHED'}
+    
+# 填充选择的破洞
+class OBJECT_OT_FillSelectedHoleOperator(bpy.types.Operator):
+    bl_idname = "object.fill_selected_hole"
+    bl_label = "填充选择的破洞"
+    bl_description = "填充选择的破洞"
+    
+    def execute(self, context):
+        # 获取当前活动对象
+        obj = bpy.context.active_object
+        
+        # 确保对象是网格对象
+        if obj and obj.type == 'MESH':
+            bpy.ops.mesh.loop_multi_select(ring=False)      
+            bpy.ops.mesh.fill()  
+        
+        return {'FINISHED'}
 
 # 导入FBX
 class OBJECT_OT_ImportFBXOperator(bpy.types.Operator):
@@ -176,6 +242,7 @@ class OBJECT_OT_FillHoleOperator(bpy.types.Operator):
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
+# 选中对象减面
 class OBJECT_OT_DecimateSelectedOperator(bpy.types.Operator):
     bl_idname = "object.decimateselected"
     bl_label = "减面设置"
@@ -210,7 +277,7 @@ class OBJECT_OT_DecimateSelectedOperator(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
 
-
+# 获取顶点/体积比
 class OBJECT_OT_GetVertexVolumeRateOperator(bpy.types.Operator):
     bl_idname = "object.get_vertex_volume_rate"
     bl_label = "获取顶点体积比"
@@ -300,6 +367,8 @@ class OBJECT_OT_DecimateAll(bpy.types.Operator):
 def register():
     bpy.utils.register_class(OBJECT_PT_CustomPanel)
     bpy.utils.register_class(OBJECT_OT_EmptyScene)
+    bpy.utils.register_class(OBJECT_OT_SelectOpenEdgeOperator)
+    bpy.utils.register_class(OBJECT_OT_FillSelectedHoleOperator)
     bpy.utils.register_class(OBJECT_OT_ImportFBXOperator)
     bpy.utils.register_class(OBJECT_OT_ExportFBXOperator)
     bpy.utils.register_class(OBJECT_OT_DecimateSelectedOperator)
@@ -315,6 +384,8 @@ def register():
 def unregister():
     bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
     bpy.utils.unregister_class(OBJECT_OT_EmptyScene)
+    bpy.utils.unregister_class(OBJECT_OT_SelectOpenEdgeOperator)
+    bpy.utils.unregister_class(OBJECT_OT_FillSelectedHoleOperator)
     bpy.utils.unregister_class(OBJECT_OT_ImportFBXOperator)
     bpy.utils.unregister_class(OBJECT_OT_ExportFBXOperator)
     bpy.utils.unregister_class(OBJECT_OT_DecimateSelectedOperator)
