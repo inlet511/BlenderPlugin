@@ -15,11 +15,11 @@ import bmesh
 
 # 创建一个自定义面板类
 class OBJECT_PT_CustomPanel(bpy.types.Panel):
-    bl_label = "优化模型"  # 面板的名称
+    bl_label = "交互式虚拟模型前处理模块"  # 面板的名称
     bl_idname = "OBJECT_PT_CustomPanel"  # 面板的唯一标识符
     bl_space_type = 'VIEW_3D'  # 面板所在区域
     bl_region_type = 'UI'  # 面板所在区域的类型
-    bl_category = "优化流程"  # 面板所在选项卡的名称
+    bl_category = "前处理模块"  # 面板所在选项卡的名称
 
     # 绘制面板内容
     def draw(self, context):
