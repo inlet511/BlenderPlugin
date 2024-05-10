@@ -55,6 +55,7 @@ class OBJECT_PT_CustomPanel(bpy.types.Panel):
         box4 = layout.box()
         box4.label(text="导出")
         box4.operator("scene.export_fbx", text="导出FBX")
+        box4.operator("scene.export_obj", text="导出OBJ")
 
 # 清空场景
 class OBJECT_OT_EmptyScene(bpy.types.Operator):
@@ -139,6 +140,16 @@ class OBJECT_OT_ExportFBXOperator(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.export_scene.fbx('INVOKE_DEFAULT')
+        return {'FINISHED'}
+    
+# 导出OBJ
+class OBJECT_OT_ExportOBJOperator(bpy.types.Operator):
+    bl_idname = "scene.export_obj"
+    bl_label = "导出OBJ场景"
+    bl_description = "导出OBJ文件"
+
+    def execute(self, context):
+        bpy.ops.wm.obj_export('INVOKE_DEFAULT')
         return {'FINISHED'}
 
 # 删除游离元素
@@ -371,6 +382,7 @@ def register():
     bpy.utils.register_class(OBJECT_OT_FillSelectedHoleOperator)
     bpy.utils.register_class(OBJECT_OT_ImportFBXOperator)
     bpy.utils.register_class(OBJECT_OT_ExportFBXOperator)
+    bpy.utils.register_class(OBJECT_OT_ExportOBJOperator)
     bpy.utils.register_class(OBJECT_OT_DecimateSelectedOperator)
     bpy.utils.register_class(OBJECT_OT_GetVertexVolumeRateOperator)
     bpy.utils.register_class(OBJECT_OT_DecimateAll)
@@ -388,6 +400,7 @@ def unregister():
     bpy.utils.unregister_class(OBJECT_OT_FillSelectedHoleOperator)
     bpy.utils.unregister_class(OBJECT_OT_ImportFBXOperator)
     bpy.utils.unregister_class(OBJECT_OT_ExportFBXOperator)
+    bpy.utils.unregister_class(OBJECT_OT_ExportOBJOperator)
     bpy.utils.unregister_class(OBJECT_OT_DecimateSelectedOperator)
     bpy.utils.unregister_class(OBJECT_OT_GetVertexVolumeRateOperator)
     bpy.utils.unregister_class(OBJECT_OT_DecimateAll)
